@@ -1,4 +1,4 @@
-from hyperon import MeTTa
+from hyperon import MeTTa,ExpressionAtom, SymbolAtom, GroundedAtom
 import os
 import glob
 
@@ -30,17 +30,47 @@ except Exception as e:
 
 # 2 point
 def get_transcript(node):
-    transcript = metta.run() #TODO
+    transcript = metta.run(f'''!(match &space
+        (,  (transcribed_to ({node[0]}) $transcript)
+            )
+           (,(transcribed_to ({node[0]}) $transcript)))''')
     return transcript     #[[(, (transcribed_to (gene ENSG00000175793) (transcript ENST00000339276)))]]
 
 #2 point
 def get_protein(node):
-    protein = metta.run() #TODO
+    protein = metta.run(f'''!(match &space 
+(transcribed_to ({node[0]}) $transcript) 
+(match &space (translates_to $transcript $protein)(translates_to $transcript $protein)))''') #TODO
     return protein
 
-def metta_seralizer(metta_result):
-    #TODO
+def recursive_serialize(children, result):
+    for child in children:
+        if isinstance(child, SymbolAtom):
+            result.append(child)
+        if isinstance(child, ExpressionAtom):
+            recursive_serialize(child.get_children(), result)
     return result
+
+def metta_seralizer(metta_result):
+    result = []
+    parss =[]
+
+    for node in metta_result[0]:
+        node = node.get_children()
+        for metta_symbol in node:
+            if isinstance(metta_symbol, SymbolAtom) and  metta_symbol.get_name() == ",":
+                continue
+            if isinstance(metta_symbol, ExpressionAtom):
+                res = recursive_serialize(metta_symbol.get_children(), [])
+                result.append(tuple(res))
+    for r in result:
+        predicate, src_type, src_id, tgt_type, tgt_id = r
+        parss.append({
+                "edge": predicate,
+                "source": f"{src_type} {src_id}",
+                "target": f"{tgt_type} {tgt_id}"
+                    })
+    return parss
 
 result= (get_transcript(['gene ENSG00000175793'])) # change the gene id to "ENSG00000166913"
 print(result) #[[(, (transcribed_to (gene ENSG00000175793) (transcript ENST00000339276)))]]
